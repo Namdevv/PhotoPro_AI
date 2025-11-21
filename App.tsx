@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Download, Sliders, Sparkles, RefreshCcw, ImagePlus, Crop as CropIcon, Eraser } from 'lucide-react';
+import { Upload, Download, Sliders, Sparkles, RefreshCcw, ImagePlus, Crop as CropIcon, Eraser, Wifi, WifiOff } from 'lucide-react';
 import CanvasWorkspace, { CanvasWorkspaceRef } from './components/CanvasWorkspace';
 import PropertiesPanel from './components/PropertiesPanel';
 import AIPanel from './components/AIPanel';
@@ -7,7 +7,7 @@ import CropPanel from './components/CropPanel';
 import EraserPanel from './components/EraserPanel';
 import { FilterState, DEFAULT_FILTERS, EditorMode } from './types';
 import { fileToDataUri, cropImageToRatio } from './utils';
-import { editImageWithAI, removeObjectWithAI, upscaleImageWithAI } from './services/geminiService';
+import { editImageWithAI, removeObjectWithAI, upscaleImageWithAI, checkAPIConnection } from './services/geminiService';
 
 const App: React.FC = () => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -20,9 +20,22 @@ const App: React.FC = () => {
   const [isProcessingAI, setIsProcessingAI] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [brushSize, setBrushSize] = useState(30);
+  
+  // API Status State
+  const [apiStatus, setApiStatus] = useState<'loading' | 'connected' | 'disconnected'>('loading');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<CanvasWorkspaceRef>(null);
+
+  // Check API Connection on Mount
+  useEffect(() => {
+    const checkConnection = async () => {
+        setApiStatus('loading');
+        const isConnected = await checkAPIConnection();
+        setApiStatus(isConnected ? 'connected' : 'disconnected');
+    };
+    checkConnection();
+  }, []);
 
   // Manage Mode Switching
   const handleModeChange = async (newMode: EditorMode) => {
@@ -72,6 +85,10 @@ const App: React.FC = () => {
   };
 
   const executeAI = async (prompt: string, type: 'EDIT' | 'UPSCALE' = 'EDIT') => {
+    if (apiStatus !== 'connected') {
+        setErrorMsg("Lỗi kết nối API. Vui lòng kiểm tra API Key trong file .env");
+        return;
+    }
     if (!imageSrc || !canvasRef.current) return;
     
     setIsProcessingAI(true);
@@ -98,6 +115,10 @@ const App: React.FC = () => {
   };
 
   const handleEraseObject = async () => {
+      if (apiStatus !== 'connected') {
+        setErrorMsg("Lỗi kết nối API. Vui lòng kiểm tra API Key trong file .env");
+        return;
+      }
       if (!canvasRef.current) return;
       setIsProcessingAI(true);
       try {
@@ -206,7 +227,28 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col relative">
         {/* Top Bar */}
         <header className="h-16 border-b border-gray-800 bg-gray-900/50 flex items-center justify-between px-6 backdrop-blur-md z-10">
-            <h1 className="text-lg font-semibold text-white tracking-wide">PhotoPro <span className="text-purple-500 font-light">AI</span></h1>
+            <div className="flex items-center gap-4">
+                <h1 className="text-lg font-semibold text-white tracking-wide">PhotoPro <span className="text-purple-500 font-light">AI</span></h1>
+                
+                {/* API Status Indicator */}
+                <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium border ${
+                    apiStatus === 'connected' 
+                        ? 'bg-green-900/30 border-green-800 text-green-400' 
+                        : apiStatus === 'disconnected'
+                            ? 'bg-red-900/30 border-red-800 text-red-400'
+                            : 'bg-yellow-900/30 border-yellow-800 text-yellow-400'
+                }`}>
+                    {apiStatus === 'loading' && <div className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />}
+                    {apiStatus === 'connected' && <Wifi size={14} />}
+                    {apiStatus === 'disconnected' && <WifiOff size={14} />}
+                    
+                    <span>
+                        {apiStatus === 'loading' && 'Đang kết nối...'}
+                        {apiStatus === 'connected' && 'AI Sẵn sàng'}
+                        {apiStatus === 'disconnected' && 'Mất kết nối'}
+                    </span>
+                </div>
+            </div>
             
             <div className="flex items-center gap-3">
                 <input 
@@ -238,9 +280,9 @@ const App: React.FC = () => {
 
         {/* Error Notification */}
         {errorMsg && (
-            <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded-md text-sm shadow-lg z-50 animate-bounce">
-                {errorMsg}
-                <button onClick={() => setErrorMsg(null)} className="ml-2 font-bold">✕</button>
+            <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded-md text-sm shadow-lg z-50 animate-bounce flex items-center gap-2">
+                <span>{errorMsg}</span>
+                <button onClick={() => setErrorMsg(null)} className="ml-2 font-bold hover:text-red-200">✕</button>
             </div>
         )}
 
